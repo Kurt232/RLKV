@@ -1,0 +1,6 @@
+[submodule "sglang"]
+	path = sglang
+	url = git@github.com:Kurt232/rlkv-sglang-v0.5.2.git
+[submodule "AReaL"]
+	path = AReaL
+	url = git@github.com:Kurt232/rlkv-areal-v0.3.4.post1.git
