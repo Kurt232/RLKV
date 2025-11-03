@@ -1,0 +1,8 @@
+{
+    "Llama-3.1-8B-R1": "models/Llama-3.1-8B-R1",
+    "Llama-3.1-8B-Inst": "models/Llama-3.1-8B-Inst",
+    "Qwen-2.5-7B-R1": "models/Qwen-2.5-7B-R1",
+    "Qwen-2.5-7B-Inst": "models/Qwen-2.5-7B-Inst",
+    "Qwen-3-4B-Thinking": "models/Qwen-3-4B-Thinking",
+    "Qwen-3-4B-Instruct": "models/Qwen-3-4B-Instruct"
+}
