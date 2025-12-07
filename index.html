@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!-- Meta tags for social media banners, these should be filled in appropriatly as they are your "business card" -->
+  <!-- Replace the content tag with appropriate information -->
+  <meta name="description" content="Which Heads Matter for Reasoning? RL-Guided KV Cache Compression">
+  <meta property="og:title" content="Which Heads Matter for Reasoning? RL-Guided KV Cache Compression"/>
+  <meta property="og:description" content="Which Heads Matter for Reasoning? RL-Guided KV Cache Compression"/>
+  <meta property="og:url" content="URL OF THE WEBSITE"/>
+  <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X630-->
+  <meta property="og:image" content="static/image/your_banner_image.png" />
+  <meta property="og:image:width" content="1200"/>
+  <meta property="og:image:height" content="630"/>
+
+
+  <meta name="twitter:title" content="TWITTER BANNER TITLE META TAG">
+  <meta name="twitter:description" content="TWITTER BANNER DESCRIPTION META TAG">
+  <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X600-->
+  <meta name="twitter:image" content="static/images/your_twitter_banner_image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- Keywords for your paper to be indexed by-->
+  <meta name="keywords" content="KEYWORDS SHOULD BE PLACED HERE">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+  <title>RLKV</title>
+  <link rel="icon" type="image/x-icon" href="static/images/westlake.png">
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+  rel="stylesheet">
+
+  <link rel="stylesheet" href="static/css/bulma.min.css">
+  <link rel="stylesheet" href="static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+  href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
+  <script defer src="static/js/fontawesome.all.min.js"></script>
+  <script src="static/js/bulma-carousel.min.js"></script>
+  <script src="static/js/bulma-slider.min.js"></script>
+  <script src="static/js/index.js"></script>
+</head>
+<body>
+
+
+  <section class="hero">
+    <div class="hero-body">
+      <div class="container is-max-desktop">
+        <div class="columns is-centered">
+          <div class="column has-text-centered">
+            <h1 class="title is-1 publication-title">
+              Which Heads Matter for Reasoning?<br>RL-Guided KV Cache Compression
+            </h1>
+            <!-- <div class="is-size-4 has-text-centered" style="color: red; font-weight: bold; margin: 20px 0;">
+              NeurIPS 2025
+            </div> -->
+            <div class="is-size-5 publication-authors">
+              <!-- Paper authors -->
+              <span class="author-block">
+                <a href="https://kurt232.github.io/" target="_blank">Wenjie Du</a><sup>1</sup>,
+              </span>
+              <span class="author-block">
+                <a href="https://louieworth.github.io/" target="_blank">Li Jiang</a><sup>2,3</sup>,
+              </span>
+              <span class="author-block">
+                <a href="https://kd-tao.github.io/" target="_blank">Keda Tao</a><sup>1,4</sup>,
+              </span>
+              <span class="author-block">
+                <a href="https://cs.mcgill.ca/~xueliu/" target="_blank">Xue Liu</a><sup>2,5</sup>, and
+              </span>
+              <span class="author-block">
+                <a href="https://huanwang.tech/" target="_blank">Huan Wang</a><sup>1,&ast;</sup>
+              </span>
+            </div>
+            <div class="is-size-5 publication-authors">
+              <span class="author-block"><sup>1</sup>Westlake University,</span>
+              <span class="author-block"><sup>2</sup>McGill University,</span>
+              <span class="author-block"><sup>3</sup>Mila,</span>
+              <span class="author-block"><sup>4</sup>Zhejiang University, and </span>
+              <span class="author-block"><sup>5</sup>MBZUAI</span>
+            </div>
+            <div style="font-size:15px">
+              <span><sup>&ast;</sup>Corresponding author: wanghuan [at] westlake [dot] edu [dot] cn</span><br><br>
+            </div>
+            <div class="columns is-centered" style="display: flex; justify-content: center; align-items: center;">
+              <div class="column is-narrow" style="display: flex; justify-content: center; align-items: center;">
+                <img src="static/images/westlake.png" alt="Westlake University" style="height: 92px; width: auto; object-fit: contain;">
+              </div>
+              <div class="column is-narrow" style="display: flex; justify-content: center; align-items: center;">
+                <img src="static/images/mcgill-logo.png" alt="McGill University" style="height: 92px; width: auto; object-fit: contain;">
+              </div>
+              <div class="column is-narrow" style="display: flex; justify-content: center; align-items: center;">
+                <img src="static/images/mila-logo.png" alt="Mila" style="height: 92px; width: auto; object-fit: contain;">
+              </div>
+              <div class="column is-narrow" style="display: flex; justify-content: center; align-items: center;">
+                <img src="static/images/zju-logo.svg" alt="Zhejiang University" style="height: 92px; width: auto; object-fit: contain;">
+              </div>
+              <div class="column is-narrow" style="display: flex; justify-content: center; align-items: center;">
+                <img src="static/images/mbzuai-logo.jpg" alt="MBZUAI" style="height: 92px; width: auto; object-fit: contain;">
+              </div>
+            </div>
+
+            <div class="column has-text-centered">
+              <div class="publication-links">
+
+              <!-- Arxiv PDF link -->
+              <span class="link-block">
+                <a href="https://arxiv.org/pdf/2510.08525" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Paper</span>
+                </a>
+              </span>
+
+              <!-- Supplementary PDF link -->
+              <!-- <span class="link-block">
+                <a href="static/pdfs/supplementary_material.pdf" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Supplementary</span>
+                </a>
+              </span> -->
+
+              <!-- Github link -->
+              <span class="link-block">
+                <a href="https://github.com/kurt232/RLKV" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                </a>
+              </span>
+
+              <!-- ArXiv abstract Link -->
+              <span class="link-block">
+                <a href="https://arxiv.org/abs/2510.08525" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>arXiv</span>
+                </a>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- Teaser video-->
+<!-- <section class="hero teaser">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+      <video poster="" id="tree" autoplay controls muted loop height="100%"> -->
+        <!-- Your video here -->
+        <!-- <source src="static/videos/banner_video.mp4"
+        type="video/mp4">
+      </video>
+      <h2 class="subtitle has-text-centered">
+        Aliquam vitae elit ullamcorper tellus egestas pellentesque. Ut lacus tellus, maximus vel lectus at, placerat pretium mi. Maecenas dignissim tincidunt vestibulum. Sed consequat hendrerit nisl ut maximus. 
+      </h2>
+    </div>
+  </div>
+</section> -->
+<!-- End teaser video -->
+
+<!-- Teaser image-->
+<!-- <section class="hero teaser">
+  <div class="container is-max-desktop">
+    <div class="hero-body">
+      <img src="static/images/teaser.jpeg" alt="HoliTom" style="height: 95%; width: 95%; object-fit: contain;">
+      <h2 class="subtitle" style="text-align: left;">
+        <b>Left:</b> We introduce <i>HoliTom</i>, a training-free <u>holi</u>stic <u>to</u>ken <u>m</u>erge method for fast video LLMs. Its key innovation lies in its global, redundancy-aware outer-LLM spatio-temporal compression and robust, token similarity-based inner-LLM compression. <b>Right:</b> The
+    Efficiency/Performance trade-off curve of multiple training-free methods on four widely used video understanding benchmarks: MVBench, EgoSchema, LongVideoBench, and VideoMME. Our method, <i>HoliTom</i>, surpasses the SoTA approaches by maintaining 99.1% average performance while reducing FLOPs to 6.9%. 
+      </h2>
+    </div>
+  </div>
+</section> -->
+<!-- End teaser image -->
+
+<!-- Paper abstract -->
+<section class="section hero is-light">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+Reasoning large language models exhibit complex reasoning behaviors through the extended chain-of-thought generation, creating unprecedented Key-Value (KV) cache overhead during the decoding phase.
+Existing KV cache compression methods underperform on reasoning models: token-dropping methods break reasoning integrity by discarding critical information, while head-reallocating methods mistakenly compress reasoning-critical heads since they are designed for retrieval tasks, resulting in significant performance degradation as compression rates increase.
+We hypothesize that KV heads exhibit functional heterogeneity in reasoning models-some heads are critical for chain-of-thought consistency while others are compressible.
+To validate and exploit this insight, we propose RLKV, a novel reasoning-critical head identification framework, which uses reinforcement learning to directly optimize the relationship between each head's cache usage and reasoning quality.
+As RLKV produces rewards from actual generated samples during training, it naturally identifies heads relevant to reasoning behaviors.
+We then allocate full KV cache to these heads while applying compressed constant KV cache to others for efficient inference.
+Our experiments reveal that only a small fraction of attention heads is essential for reasoning, enabling our KV compression approach to outperform baseline methods while achieving <b>20-50%</b> cache reduction with near lossless performance compared to uncompressed results.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End paper abstract -->
+
+<section class="section">
+  <div class="container is-max-desktop has-text-centered">
+    
+    <!-- Title -->
+    <h2 class="title is-3">Overview of RLKV</h2>
+
+    <!-- Text Content -->
+    <div class="content has-text-justified">
+      <p>
+Our method proposes to utilize RL to identify reasoning heads.
+The RL pipeline naturally captures reasoning behaviors, since it samples the current model's generations to produce reward signals. 
+The reward function evaluates the samples to assess reasoning quality.
+We employ <i>L</i> x <i>H</i> learnable gating adapters to mix full attention and local attention for each head, quantifying each head's reliance on full versus local KV cache access.
+We apply an L1 penalty to encourage adapter sparsity, while RL optimizes the adapters to preserve reasoning behaviors.
+After training, we identify reasoning heads with high adapter values and allocate full KV cache to them while applying compressed KV cache to others for efficient inference.
+      </p>
+    </div>
+
+    <!-- Image Content -->
+    <div class="is-flex is-justify-content-center">
+      <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 0 auto;">
+        <img src="static/images/method.jpg" alt="Method Overview" 
+             style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 95%;">
+      </figure>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- Image carousel -->
+<section class="hero is-small">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3 has-text-centered" style="margin-bottom: 0.5rem;">Main Results</h2>
+      <div id="results-carousel" class="carousel results-carousel">
+       <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 2rem auto;">
+          <img src="static/images/main_result.jpg" alt="main results" 
+               style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 95%;">
+        </figure>
+        <h2 class="subtitle has-text-centered">
+Performance comparison of RLKV against KV cache compression baselines across reasoning benchmarks.
+We evaluate RLKV (<b>Ours</b>) and existing methods on two reasoning models (Llama-3.1-8B-R1 and Qwen-2.5-7B-R1) across four benchmarks (GSM8K, MATH, AIME24, MBPP) at sparsity levels of 0.2, 0.4, 0.6, and 0.8. 
+RLKV consistently outperforms all baselines across different sparsity levels, demonstrating particularly strong advantages at high sparsity levels (0.4 or 0.6) where competing methods suffer significant performance degradation. 
+        </h2>
+      </div>
+      <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 2rem auto;">
+          <img src="static/images/mem.png" alt="lossless performance" 
+               style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 95%;">
+        </figure>
+        <h2 class="subtitle has-text-centered">
+RLKV achieves near lossless performance (full KV cache) up to the sparsity thresholds shown for Llama-3.1-8B-R1 (a) and Qwen-2.5-7B-R1 (b) across four benchmarks.
+<span style="color: rgb(220, 20, 60);">Red</span> background denotes performance below the full-KV-cache baseline, whereas <span style="color: rgb(41, 217, 110);">green</span> background denotes performance above it. RLKV exhibits the smallest performance degradation among the other methods and, on some benchmarks, even improves over the full-KV-cache baseline. For all values, higher is better. The best result of the metric in each benchmark is in <b>bold</b>. All values are reported as percentages.
+      </h2>
+      </div>
+      <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 2rem auto;">
+          <img src="static/images/mask.jpg" alt="Mask analysis"
+               style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 60%;">
+        </figure>
+        <h2 class="subtitle has-text-centered">
+The importance of heads identified is equivalently illustrated by replacing the top ratio of them with a compressed KV cache. Compared to retrieval heads and random heads, reasoning heads identified by RLKV are more crucial to model performance, and are sensitive to compressed KV cache access.
+       </h2>
+      </div>
+      <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 2rem auto;">
+          <img src="static/images/expr_error.jpg" alt="Error analysis"
+               style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 60%;">
+        </figure>
+        <h2 class="subtitle has-text-centered">
+The analysis reveals distinct error modes when reasoning heads versus retrieval heads work with compressed KV cache on Math500 benchmark. Reasoning heads tend toward repetitive generation errors as compression increases, while retrieval heads exhibit more varied error modes across different settings.
+       </h2>
+     </div>
+  </div>
+</div>
+</div>
+</section>
+<!-- End image carousel -->
+
+
+<!-- <section class="hero is-small">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3 has-text-centered" style="margin-bottom: 0.5rem;">More Visualizations</h2>
+      <div id="results-carousel" class="carousel results-carousel">
+       <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 2rem auto;">
+          <img src="static/images/challenge_understanding.jpeg" alt="Challenge Understanding" 
+               style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 95%;">
+        </figure>
+        <h2 class="subtitle has-text-centered">
+          <b>Comparison on Challenging Video Understanding.</b> <span style="color: #00B050">Green</span>: correct results, <span style="color: #C00000">Red</span>: incorrect results. Our method is able to produce correct answers on challenging video tasks.
+        </h2>
+      </div>
+     <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
+      <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 2rem auto;">
+        <img src="static/images/qualitative_generation.jpeg" alt="Qualitative Generation"
+               style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 95%;">
+        </figure>
+      <h2 class="subtitle has-text-centered">
+        <b>Comparison on Challenging Video Understanding.</b> <span style="color: #00B050">Green</span>: correct results, <span style="color: #C00000">Red</span>: incorrect results. Our method is able to produce correct answers on challenging video tasks.
+      </h2>
+    </div>
+  </div>
+</div>
+</div>
+</section> -->
+
+
+<!--BibTex citation -->
+  <section class="section" id="BibTeX">
+    <div class="container is-max-desktop content">
+      <h2 class="title">BibTeX</h2>
+      <pre><code>@article{du2025whichheads,
+  title={Which Heads Matter for Reasoning? RL-Guided KV Cache Compression}, 
+  author={Du, Wenjie and Jiang, Li and Tao, Keda and Liu, Xue and Wang, Huan},
+  journal={arXiv preprint arXiv:2510.08525},
+  year={2025},
+}</code></pre>
+    </div>
+</section>
+<!--End BibTex citation -->
+
+
+  <footer class="footer">
+  <div class="container">
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+
+          <p>
+            This page was built using the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank">Academic Project Page Template</a> which was adopted from the <a href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
+          </p>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- Statcounter tracking code -->
+  
+<!-- You can add a tracker to track page visits by creating an account at statcounter.com -->
+
+    <!-- End of Statcounter Code -->
+
+  </body>
+  </html>
