@@ -45,6 +45,7 @@ def parse_args():
     parser.add_argument("--adapter-load-path", type=str, default=None)
     parser.add_argument("--sink-size", type=int, default=16)
     parser.add_argument("--recent-size", type=int, default=64)
+    parser.add_argument("--max-running-requests", type=int, default=300)
     parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--model-path", type=str, default=None,
                         help="Override model path (default: from model2path.json)")
@@ -141,6 +142,7 @@ def main():
         disable_radix_cache=True,
         context_length=max_length + max_new_tokens,
         mem_fraction_static=0.85,
+        max_running_requests=args.max_running_requests,
     )
 
     if args.method == "rlkv":
@@ -187,6 +189,9 @@ def main():
             "reserved_MiB": round(torch.cuda.memory_reserved(i) / 1024**2, 1),
             "total_MiB": round(torch.cuda.get_device_properties(i).total_memory / 1024**2, 1),
         }
+
+    # Warmup (trigger triton JIT compilation)
+    engine.generate("Hello", {"max_new_tokens": 1, "temperature": 0.0})
 
     # Inference - let sglang handle batching internally
     print(f"Running inference on {len(prompts)} prompts...")
