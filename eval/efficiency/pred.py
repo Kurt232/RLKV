@@ -45,8 +45,7 @@ def parse_args():
     parser.add_argument("--adapter-load-path", type=str, default=None)
     parser.add_argument("--sink-size", type=int, default=16)
     parser.add_argument("--recent-size", type=int, default=64)
-    parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--tp-size", type=int, default=1)
+parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--model-path", type=str, default=None,
                         help="Override model path (default: from model2path.json)")
     parser.add_argument("--is-rerun", action="store_true")
@@ -54,6 +53,8 @@ def parse_args():
                         help="Override max new tokens (default: dataset max_len)")
     parser.add_argument("--num-samples", type=int, default=None,
                         help="Limit number of samples (default: all)")
+    parser.add_argument("--disable-cuda-graph", action="store_true",
+                        help="Disable CUDA graph (default: enabled)")
     return parser.parse_args()
 
 
@@ -111,11 +112,11 @@ def main():
         adapter_tag = args.adapter_load_path.rstrip("/").split("/")[-1]
         out_path = (
             f"{root}/{model_name}/{args.task}-rlkv-{adapter_tag}"
-            f"-sp-{args.sparsity}-bs-{args.batch_size}.jsonl"
+            f"-sp-{args.sparsity}.jsonl"
         )
     else:
         out_path = (
-            f"{root}/{model_name}/{args.task}-full-bs-{args.batch_size}.jsonl"
+            f"{root}/{model_name}/{args.task}-full.jsonl"
         )
 
     if os.path.exists(out_path) and not args.is_rerun:
@@ -153,27 +154,25 @@ def main():
             adapter_load_path=args.adapter_load_path,
             sink_window_size=args.sink_size,
             recent_window_size=args.recent_size,
-            disable_cuda_graph=True,
+            disable_cuda_graph=args.disable_cuda_graph,
         )
     else:
         # full attention baseline
         server_kwargs.update(
             attention_backend="triton",
-            disable_cuda_graph=True,
+            disable_cuda_graph=args.disable_cuda_graph,
         )
 
     server_args = ServerArgs(**server_kwargs)
 
     # Create engine
-    print(f"Starting sglang engine ({args.method}, batch_size={args.batch_size})...")
+    print(f"Starting sglang engine ({args.method})...")
     engine = sgl.Engine(**dataclasses.asdict(server_args))
-    # Re-set event loop after Engine init (uvloop in subprocess may clear it)
     try:
         asyncio.get_event_loop()
     except RuntimeError:
         asyncio.set_event_loop(asyncio.new_event_loop())
 
-    # Sampling params
     sampling_params = {
         "max_new_tokens": max_new_tokens,
         "temperature": 0.0,
@@ -189,61 +188,27 @@ def main():
             "total_MiB": round(torch.cuda.get_device_properties(i).total_memory / 1024**2, 1),
         }
 
-    # Batch inference
+    # Inference - let sglang handle batching internally
+    print(f"Running inference on {len(prompts)} prompts...")
+    t_start = time.time()
+    outputs = engine.generate(prompts, sampling_params)
+    total_time = time.time() - t_start
+
     total_input_tokens = 0
     total_output_tokens = 0
     preds = []
-    batch_stats = []
-
-    num_batches = (len(prompts) + args.batch_size - 1) // args.batch_size
-    print(f"Running {num_batches} batches...")
-
-    t_start = time.time()
-    for batch_idx in range(num_batches):
-        start = batch_idx * args.batch_size
-        end = min(start + args.batch_size, len(prompts))
-        batch_prompts = prompts[start:end]
-        batch_data = [data[i] for i in range(start, end)]
-
-        print(f"Batch {batch_idx+1}/{num_batches} ({len(batch_prompts)} prompts)...")
-        t_batch = time.time()
-        outputs = engine.generate(batch_prompts, sampling_params)
-        batch_time = time.time() - t_batch
-
-        batch_input_tokens = 0
-        batch_output_tokens = 0
-        for i, (output, item) in enumerate(zip(outputs, batch_data)):
-            pred_text = output["text"]
-            input_tokens = output.get("meta_info", {}).get("prompt_tokens", 0)
-            output_tokens = output.get("meta_info", {}).get("completion_tokens", 0)
-            total_input_tokens += input_tokens
-            total_output_tokens += output_tokens
-            batch_input_tokens += input_tokens
-            batch_output_tokens += output_tokens
-
-            preds.append({
-                "prompt": item["prompt"],
-                "pred": pred_text,
-                "answers": item["answer"],
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-            })
-
-        batch_stats.append({
-            "batch_idx": batch_idx,
-            "num_prompts": len(batch_prompts),
-            "batch_time_s": round(batch_time, 2),
-            "input_tokens": batch_input_tokens,
-            "output_tokens": batch_output_tokens,
-            "gen_throughput_tok_s": round(batch_output_tokens / batch_time, 1),
-            "req_throughput_req_s": round(len(batch_prompts) / batch_time, 3),
+    for output, item in zip(outputs, data):
+        input_tokens = output.get("meta_info", {}).get("prompt_tokens", 0)
+        output_tokens = output.get("meta_info", {}).get("completion_tokens", 0)
+        total_input_tokens += input_tokens
+        total_output_tokens += output_tokens
+        preds.append({
+            "prompt": item["prompt"],
+            "pred": output["text"],
+            "answers": item["answer"],
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         })
-
-        print(f"  batch time: {batch_time:.1f}s, "
-              f"gen: {batch_output_tokens/batch_time:.1f} tok/s, "
-              f"req: {len(batch_prompts)/batch_time:.2f} req/s")
-
-    total_time = time.time() - t_start
 
     # Snapshot GPU memory after inference
     gpu_mem_after_infer = {}
@@ -290,7 +255,6 @@ def main():
             "model": model_name,
             "task": args.task,
             "method": args.method,
-            "batch_size": args.batch_size,
             "sparsity": args.sparsity,
             "max_new_tokens": max_new_tokens,
             "tp_size": args.tp_size,
@@ -319,7 +283,6 @@ def main():
             "after_inference": gpu_mem_after_infer,
             "nvidia_smi": nvidia_smi,
         },
-        "batch_stats": batch_stats,
     }
 
     # Save stats JSON — same naming as pred file but .stats.json
@@ -330,7 +293,7 @@ def main():
     # Print summary
     print(f"\n{'='*60}")
     print(f"Method: {args.method} | Model: {model_name} | Task: {args.task}")
-    print(f"Batch size: {args.batch_size} | Sparsity: {args.sparsity}")
+    print(f"Sparsity: {args.sparsity}")
     print(f"Total examples: {len(preds)}")
     print(f"Total time: {total_time:.1f}s")
     print(f"Gen throughput: {total_output_tokens/total_time:.1f} tok/s")
