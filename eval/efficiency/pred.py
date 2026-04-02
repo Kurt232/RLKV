@@ -45,7 +45,7 @@ def parse_args():
     parser.add_argument("--adapter-load-path", type=str, default=None)
     parser.add_argument("--sink-size", type=int, default=16)
     parser.add_argument("--recent-size", type=int, default=64)
-parser.add_argument("--tp-size", type=int, default=1)
+    parser.add_argument("--tp-size", type=int, default=1)
     parser.add_argument("--model-path", type=str, default=None,
                         help="Override model path (default: from model2path.json)")
     parser.add_argument("--is-rerun", action="store_true")
