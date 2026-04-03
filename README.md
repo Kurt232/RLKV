@@ -68,10 +68,18 @@ conda install -y -c nvidia/label/cuda-12.8.1 cuda-toolkit
 conda install -y nvidia::cuda-cudart-dev
 
 pip install torch==2.8.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip freeze | grep -iE 'torch|nvidia' > /tmp/constraints.txt
+
 pip install transformers==4.51.3 datasets==4.0.0
 
 pip install ninja packaging
 pip install flash-attn==2.8.1  --no-build-isolation
+
+# sglang (for RLKV inference)
+cd sglang
+pip install -e "python[srt]" -c /tmp/constraints.txt
+cd ..
+
 pip install -e .
 ```
 

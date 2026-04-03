@@ -26,7 +26,6 @@ import argparse
 import dataclasses
 import json
 import os
-import subprocess
 import time
 
 import torch
@@ -181,15 +180,6 @@ def main():
         "top_p": 1.0,
     }
 
-    # Snapshot GPU memory after engine init (before inference)
-    gpu_mem_after_init = {}
-    for i in range(torch.cuda.device_count()):
-        gpu_mem_after_init[f"gpu_{i}"] = {
-            "allocated_MiB": round(torch.cuda.memory_allocated(i) / 1024**2, 1),
-            "reserved_MiB": round(torch.cuda.memory_reserved(i) / 1024**2, 1),
-            "total_MiB": round(torch.cuda.get_device_properties(i).total_memory / 1024**2, 1),
-        }
-
     # Warmup (trigger triton JIT compilation)
     engine.generate("Hello", {"max_new_tokens": 1, "temperature": 0.0})
 
@@ -215,35 +205,6 @@ def main():
             "output_tokens": output_tokens,
         })
 
-    # Snapshot GPU memory after inference
-    gpu_mem_after_infer = {}
-    for i in range(torch.cuda.device_count()):
-        gpu_mem_after_infer[f"gpu_{i}"] = {
-            "allocated_MiB": round(torch.cuda.memory_allocated(i) / 1024**2, 1),
-            "reserved_MiB": round(torch.cuda.memory_reserved(i) / 1024**2, 1),
-            "peak_allocated_MiB": round(torch.cuda.max_memory_allocated(i) / 1024**2, 1),
-            "peak_reserved_MiB": round(torch.cuda.max_memory_reserved(i) / 1024**2, 1),
-        }
-
-    # nvidia-smi snapshot
-    nvidia_smi = {}
-    try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=index,memory.used,memory.total,utilization.gpu",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
-        )
-        for line in result.stdout.strip().split("\n"):
-            parts = [x.strip() for x in line.split(",")]
-            if len(parts) == 4:
-                nvidia_smi[f"gpu_{parts[0]}"] = {
-                    "mem_used_MiB": int(parts[1]),
-                    "mem_total_MiB": int(parts[2]),
-                    "gpu_util_pct": int(parts[3]),
-                }
-    except Exception:
-        pass
-
     # Shutdown engine
     engine.shutdown()
 
@@ -267,6 +228,7 @@ def main():
             "sink_size": args.sink_size,
             "recent_size": args.recent_size,
             "adapter_load_path": args.adapter_load_path,
+            "max_running_requests": args.max_running_requests,
         },
         "throughput": {
             "total_time_s": round(total_time, 2),
@@ -282,11 +244,6 @@ def main():
             "min_output_tokens": min(output_tokens_list),
             "max_output_tokens": max(output_tokens_list),
             "hit_max_tokens": sum(1 for t in output_tokens_list if t >= max_new_tokens),
-        },
-        "gpu_memory": {
-            "after_init": gpu_mem_after_init,
-            "after_inference": gpu_mem_after_infer,
-            "nvidia_smi": nvidia_smi,
         },
     }
 
