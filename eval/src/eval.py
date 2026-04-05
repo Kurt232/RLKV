@@ -50,9 +50,9 @@ if __name__ == "__main__":
                 data = json.loads(line)
                 predictions.append(data["pred"])
                 answers.append(data["answers"])
-                output_lengths.append(data["output_length"])
-                input_lengths.append(data["input_length"])
-                is_early_stops.append(data["is_early_stop"])
+                output_lengths.append(data.get("output_length", data.get("output_tokens", 0)))
+                input_lengths.append(data.get("input_length", data.get("input_tokens", 0)))
+                is_early_stops.append(data.get("is_early_stop", False))
             
         assert len(predictions) == len(output_lengths)
 

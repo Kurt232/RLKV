@@ -1,0 +1,8 @@
+{
+    "math_500-full.jsonl": 3108.39,
+    "math_500-rlkv-llama_lr1e-2_ep2_bs32_reg1e-3_tau0.5-sp-0.2.jsonl": 3071.75,
+    "math_500-rlkv-llama_lr1e-2_ep2_bs32_reg1e-3_tau0.5-sp-0.4.jsonl": 2907.65,
+    "math_500-rlkv-llama_lr1e-2_ep2_bs32_reg1e-3_tau0.5-sp-0.5.jsonl": 2931.83,
+    "math_500-rlkv-llama_lr1e-2_ep2_bs32_reg1e-3_tau0.5-sp-0.6.jsonl": 2965.26,
+    "math_500-rlkv-llama_lr1e-2_ep2_bs32_reg1e-3_tau0.5-sp-0.8.jsonl": 6806.11
+}

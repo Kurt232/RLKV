@@ -1,36 +1,23 @@
 #!/bin/bash
 #
-# Run RLKV efficiency evaluation: full baseline + multiple sparsities in parallel.
+# Run RLKV efficiency evaluation: full baseline + multiple sparsities sequentially.
 #
 # Usage:
-#   bash scripts/run_efficiency.sh [GPU_IDs...]
+#   bash scripts/run_efficiency.sh [GPU_ID]
 #
 # Example:
-#   bash scripts/run_efficiency.sh 4 5 6 7    # 4 GPUs for sp=0.2,0.4,0.6,0.8
-#   bash scripts/run_efficiency.sh 5 6        # 2 GPUs for sp=0.2,0.4 (first N sparsities)
+#   bash scripts/run_efficiency.sh 5
 
 set -e
 
-cleanup() {
-    echo "Terminating background processes..."
-    kill $(jobs -p) 2>/dev/null
-    wait
-    exit 1
-}
-trap cleanup SIGINT SIGTERM
-
+GPU_ID=${1:-5}
 MODEL="Llama-3.1-8B-R1"
 TASK="math_500"
-ADAPTER_DIR="head_dist/rlkv/Llama-3.1-8B-R1/llama_lr1e-2_ep2_bs32_reg1e-3_tau0.5"
-MAX_RUNNING_REQUESTS=300
-sparsities=(0.2 0.4 0.5 0.6 0.8)
-
-# GPUs from args, default to (4 5 6 7)
-if [ $# -gt 0 ]; then
-    gpus=("$@")
-else
-    gpus=(4 5 6 7)
-fi
+cfg="llama_lr1e-2_ep2_bs32_reg1e-3_tau0.5"
+ADAPTER_DIR="head_dist/rlkv/Llama-3.1-8B-R1/${cfg}"
+FULL_MAX_RUNNING_REQUESTS=150
+sparsities=(      0.2  0.4  0.6  0.8)
+max_running_reqs=(200  250  375  750)
 
 export HF_HOME=${HF_HOME:-/mnt/raid10/wjdu/huggingface}
 export PATH="/home/wjdu/miniconda3/envs/rlkv/bin:$PATH"
@@ -41,46 +28,36 @@ mkdir -p "$PRED_DIR" "$LOG_DIR"
 
 echo "============================================="
 echo "RLKV Efficiency Benchmark"
-echo "Model: $MODEL | Task: $TASK"
+echo "Model: $MODEL | Task: $TASK | GPU: $GPU_ID"
 echo "CUDA Graph: enabled"
-echo "GPUs: ${gpus[*]}"
-echo "Sparsities: ${sparsities[*]:0:${#gpus[@]}}"
+echo "Sparsities: ${sparsities[*]}"
 echo "============================================="
 
-# --- Full attention baseline (on first GPU) ---
+--- Full attention baseline ---
 echo ""
-echo ">>> [1] Full attention (GPU ${gpus[0]})"
-CUDA_VISIBLE_DEVICES=${gpus[0]} python -u eval/efficiency/pred.py \
+echo ">>> [1/$((${#sparsities[@]}+1))] Full attention"
+CUDA_VISIBLE_DEVICES=$GPU_ID python -u eval/efficiency/pred.py \
     --model "$MODEL" \
     --task "$TASK" \
     --method full \
-    --max-running-requests $MAX_RUNNING_REQUESTS \
-    --is-rerun \
+    --max-running-requests $FULL_MAX_RUNNING_REQUESTS \
     2>&1 | tee "${LOG_DIR}/${TASK}-full.log"
 
-# --- RLKV with multiple sparsities in parallel ---
-echo ""
-echo ">>> [2] RLKV sparsities in parallel..."
-for i in "${!gpus[@]}"; do
-    if [ "$i" -ge "${#sparsities[@]}" ]; then
-        break
-    fi
+# --- RLKV with multiple sparsities sequentially ---
+for i in "${!sparsities[@]}"; do
     sparsity="${sparsities[i]}"
-    gpu="${gpus[i]}"
-    (
-        echo ">>> GPU $gpu: RLKV sparsity=$sparsity"
-        CUDA_VISIBLE_DEVICES=$gpu python -u eval/efficiency/pred.py \
-            --model "$MODEL" \
-            --task "$TASK" \
-            --method rlkv \
-            --sparsity $sparsity \
-            --adapter-load-path "$ADAPTER_DIR" \
-            --max-running-requests $MAX_RUNNING_REQUESTS \
-            2>&1 | tee "${LOG_DIR}/${TASK}-rlkv-sp${sparsity}.log"
-    ) &
+    mr="${max_running_reqs[i]}"
+    echo ""
+    echo ">>> [$((i+2))/$((${#sparsities[@]}+1))] RLKV sparsity=$sparsity (max_running=$mr)"
+    CUDA_VISIBLE_DEVICES=$GPU_ID python -u eval/efficiency/pred.py \
+        --model "$MODEL" \
+        --task "$TASK" \
+        --method rlkv \
+        --sparsity $sparsity \
+        --adapter-load-path "$ADAPTER_DIR" \
+        --max-running-requests $mr \
+        2>&1 | tee "${LOG_DIR}/${TASK}-rlkv-sp${sparsity}.log"
 done
-
-wait
 
 # --- Eval ---
 echo ""

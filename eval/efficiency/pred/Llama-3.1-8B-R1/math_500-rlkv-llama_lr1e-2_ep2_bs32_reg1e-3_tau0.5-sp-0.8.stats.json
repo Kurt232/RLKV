@@ -1,0 +1,30 @@
+{
+  "config": {
+    "model": "Llama-3.1-8B-R1",
+    "task": "math_500",
+    "method": "rlkv",
+    "sparsity": 0.8,
+    "max_new_tokens": 8192,
+    "tp_size": 1,
+    "num_samples": 500,
+    "sink_size": 16,
+    "recent_size": 64,
+    "adapter_load_path": "head_dist/rlkv/Llama-3.1-8B-R1/llama_lr1e-2_ep2_bs32_reg1e-3_tau0.5",
+    "max_running_requests": 750
+  },
+  "throughput": {
+    "total_time_s": 1085.05,
+    "total_input_tokens": 72800,
+    "total_output_tokens": 3403056,
+    "avg_gen_throughput_tok_s": 3136.3,
+    "avg_req_throughput_req_s": 0.461,
+    "avg_latency_per_req_s": 2.17
+  },
+  "token_stats": {
+    "avg_input_tokens": 145.6,
+    "avg_output_tokens": 6806.1,
+    "min_output_tokens": 472,
+    "max_output_tokens": 8192,
+    "hit_max_tokens": 370
+  }
+}
