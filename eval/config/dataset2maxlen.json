@@ -2,5 +2,9 @@
     "aime24": 16384,
     "gsm8k": 8192,
     "math_500": 8192,
-    "mbpp": 8192
+    "mbpp": 8192,
+    "mmlu_pro_che": 8192,
+    "mmlu_pro_com": 8192,
+    "mmlu_pro_law": 8192,
+    "mmlu_pro_phy": 8192
 }

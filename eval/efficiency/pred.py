@@ -110,9 +110,10 @@ def main():
     os.makedirs(f"{root}/{model_name}", exist_ok=True)
     if args.method == "rlkv":
         adapter_tag = args.adapter_load_path.rstrip("/").split("/")[-1]
+        win_tag = f"-s{args.sink_size}r{args.recent_size}"
         out_path = (
             f"{root}/{model_name}/{args.task}-rlkv-{adapter_tag}"
-            f"-sp-{args.sparsity}.jsonl"
+            f"{win_tag}-sp-{args.sparsity}.jsonl"
         )
     else:
         out_path = (
@@ -123,8 +124,13 @@ def main():
         print(f"Predictions already exist at {out_path}, skipping...")
         return
 
-    # Load dataset
-    data = load_dataset("Kurt232/bench", name=args.task, split="test")
+    # Load dataset. MMLU-Pro subsets live in their own HF repos
+    # (Kurt232/mmlu_pro_che etc.); other reasoning benchmarks are subsets
+    # of Kurt232/bench.
+    if args.task.startswith("mmlu_pro"):
+        data = load_dataset(f"Kurt232/{args.task}", split="test")
+    else:
+        data = load_dataset("Kurt232/bench", name=args.task, split="test")
     if args.num_samples is not None:
         data = data.select(range(min(args.num_samples, len(data))))
     print(f"Loaded {len(data)} examples from {args.task}")
