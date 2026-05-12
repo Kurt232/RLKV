@@ -3,13 +3,15 @@ import json
 import os
 
 import numpy as np
-from metrics import math_eval, mbpp_eval
+from metrics import math_eval, mbpp_eval, simple_eval_match
 
 dataset2metric = {
     "gsm8k": math_eval,
-    "math_500": math_eval,
+    "math": math_eval,
     "aime24": math_eval,
     "mbpp": mbpp_eval,
+    "mmlu": simple_eval_match,
+    "longreason": simple_eval_match
 }
 
 
@@ -50,16 +52,16 @@ if __name__ == "__main__":
                 data = json.loads(line)
                 predictions.append(data["pred"])
                 answers.append(data["answers"])
-                output_lengths.append(data.get("output_length", data.get("output_tokens", 0)))
-                input_lengths.append(data.get("input_length", data.get("input_tokens", 0)))
-                is_early_stops.append(data.get("is_early_stop", False))
+                output_lengths.append(data["output_length"])
+                input_lengths.append(data["input_length"])
+                is_early_stops.append(data["is_early_stop"])
             
         assert len(predictions) == len(output_lengths)
 
         if len(predictions) == 0:
             continue
         try:
-            score_list, k = dataset2metric[dataset](answers, predictions)
+            score_list, k = dataset2metric[dataset.split("_")[0]](answers, predictions)
         except AssertionError as e:
             print(f"Error in {filename}: {e}")
             raise e
@@ -67,7 +69,7 @@ if __name__ == "__main__":
         score = round(100 * score, 2)
         scores[filename] = score
 
-        evals[filename] = [(is_correct, output_length + input_length >= max_length, is_early_stop) for is_correct, output_length, input_length, is_early_stop in zip(score_list, output_lengths, input_lengths, is_early_stops)]
+        evals[filename] = [(is_correct, output_length + input_length >= max_length, is_early_stop, output_length, input_length) for is_correct, output_length, input_length, is_early_stop in zip(score_list, output_lengths, input_lengths, is_early_stops)]
         # 计算output_length平均值
         if output_lengths:
             avg_length = round(np.mean(output_lengths), 2)
@@ -80,7 +82,7 @@ if __name__ == "__main__":
         is_overlengths = []
         is_repeats = []
 
-        for (s, o, r) in evals[filename]:
+        for (s, o, r, _, _) in evals[filename]:
             if s < 1:
                 is_overlengths.append(o)
                 is_repeats.append(r)

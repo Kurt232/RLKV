@@ -1,0 +1,18 @@
+{
+    "aime24-full.jsonl": 13512.43,
+    "aime24-rlkv-qwen3_lr1e-2_ep2_bs32_reg2.5e-3_tau0.5-s16r64-sp-0.4.jsonl": 16384.0,
+    "gsm8k-full.jsonl": 1256.93,
+    "gsm8k-rlkv-qwen3_lr1e-2_ep2_bs32_reg2.5e-3_tau0.5-s16r64-sp-0.4.jsonl": 8140.01,
+    "math_500-full.jsonl": 3941.73,
+    "math_500-rlkv-qwen3_lr1e-2_ep2_bs32_reg2.5e-3_tau0.5-s16r64-sp-0.4.jsonl": 8182.45,
+    "mbpp-full.jsonl": 3629.88,
+    "mbpp-rlkv-qwen3_lr1e-2_ep2_bs32_reg2.5e-3_tau0.5-s16r64-sp-0.4.jsonl": 8176.42,
+    "mmlu_pro_che-full.jsonl": 4067.01,
+    "mmlu_pro_che-rlkv-qwen3_lr1e-2_ep2_bs32_reg2.5e-3_tau0.5-s16r64-sp-0.4.jsonl": 8157.6,
+    "mmlu_pro_com-full.jsonl": 2592.72,
+    "mmlu_pro_com-rlkv-qwen3_lr1e-2_ep2_bs32_reg2.5e-3_tau0.5-s16r64-sp-0.4.jsonl": 8174.75,
+    "mmlu_pro_law-full.jsonl": 2557.4,
+    "mmlu_pro_law-rlkv-qwen3_lr1e-2_ep2_bs32_reg2.5e-3_tau0.5-s16r64-sp-0.4.jsonl": 8154.04,
+    "mmlu_pro_phy-full.jsonl": 3609.06,
+    "mmlu_pro_phy-rlkv-qwen3_lr1e-2_ep2_bs32_reg2.5e-3_tau0.5-s16r64-sp-0.4.jsonl": 8172.26
+}

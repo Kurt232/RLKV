@@ -181,3 +181,4 @@ cython_debug/
 
 *.code-workspace
 my_snapshot*
+log.txt
