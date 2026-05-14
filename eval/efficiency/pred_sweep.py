@@ -65,23 +65,33 @@ HF_MODEL_IDS = {
 
 PRED_ROOT = "eval/efficiency/pred_sweep"
 
-# Sparsity → max_running_requests, tuned for A100 80GB. Higher sparsity
-# shrinks the comp KV pool (per-head fixed window) and frees full-pool
-# memory, letting the scheduler keep more concurrent requests in flight.
-# Values are 2× the 40GB numbers from scripts/run_efficiency.sh.
+# Sparsity → max_running_requests. Capped so every in-flight decode batch
+# fits inside a captured CUDA graph (cuda_graph_max_bs below). Batches that
+# overflow fall back to eager kernels, which under RLKV compression have
+# been observed to push the model into degenerate repetition loops
+# ("So the picketers are not allowed..." repeated to max_new_tokens) —
+# i.e. CUDA-graph capture appears to be load-bearing for numerical
+# behavior, not just performance. Keep max_running ≤ CUDA_GRAPH_MAX_BS.
+# Higher sparsity shrinks the comp KV pool and frees memory, so we can
+# afford more concurrency, but never above the graph cap.
 # For sparsities not in the table, we use the largest table key ≤ the
 # requested sparsity (i.e. the conservative side).
 MAX_REQ_BY_SPARSITY = {
-    0.0: 300,    # full attention baseline
-    0.1: 325,
-    0.2: 375,
-    0.3: 425,
-    0.4: 500,
-    0.5: 600,
-    0.6: 750,
-    0.7: 1000,
-    0.8: 1500,
+    0.0: 128,    # full attention baseline
+    0.1: 128,
+    0.2: 160,
+    0.3: 192,
+    0.4: 224,
+    0.5: 256,
+    0.6: 256,
+    0.7: 256,
+    0.8: 256,
 }
+
+# CUDA graph batch-size cap. Set to the largest max_running_requests in
+# the table above so all decode batches replay from graph. Bumping this
+# costs capture time + memory; lowering it risks eager fallback.
+CUDA_GRAPH_MAX_BS = 256
 
 
 def max_running_requests_for(sparsity: float, fallback: int) -> int:
@@ -180,6 +190,7 @@ def build_engine(model_path: str, *, method: str, args, sparsity: float = 0.0,
         max_running_requests=max_running,
         attention_backend="triton",
         disable_cuda_graph=args.disable_cuda_graph,
+        cuda_graph_max_bs=CUDA_GRAPH_MAX_BS,
     )
     if method == "rlkv":
         kwargs.update(
@@ -207,41 +218,36 @@ def out_path_for(model: str, task: str, *, method: str, adapter_tag: str,
 
 def run_batched(engine, prompts_per_task: dict[str, list[str]],
                 max_new_tokens_per_task: dict[str, int]) -> dict[str, list[dict]]:
-    """Run each task as a SEPARATE engine.generate() call (sharing one engine).
-
-    Previously this function flattened all (task, prompt) pairs into ONE
-    engine.generate() call. That triggers a catastrophic RLKV-specific
-    regression on mmlu_pro tasks (e.g., Qwen-2.5-7B sp=0.6 mmlu_pro_phy:
-    14.47 batched vs 41.80 per-task on the same A100/mr=128 setup) — likely
-    from cross-task scheduling dynamics interacting badly with RLKV's
-    streaming K cache. Running per-task in separate engine.generate() calls
-    avoids the cross-task interaction while still amortizing the engine
-    init cost across tasks.
-    """
-    grouped: dict[str, list[dict]] = {}
-    total_elapsed = 0.0
+    """Run all (task, prompt) pairs in one engine.generate call, return per-task outputs."""
+    # Build flat list, track origin.
+    flat_prompts = []
+    flat_max_new = []
+    origins = []  # (task, idx_within_task)
     for task, prompts in prompts_per_task.items():
-        if not prompts:
-            continue
-        mn = max_new_tokens_per_task[task]
-        # repetition_penalty=1.05 prevents greedy-decoding degenerate loops
-        # (sentences like "So the picketers are not allowed..." repeating
-        # to max_new_tokens). Happens more often under RLKV compression
-        # because dropped KV heads weaken the model's self-reference /
-        # termination signal — confirmed by inspecting overlength samples
-        # on mmlu_pro_{law,phy,che} sp=0.4: 50–65% hit the 8192 cap with
-        # the same sentence repeated dozens of times.
-        sampling = {"max_new_tokens": mn, "temperature": 0.0, "top_p": 1.0,
-                    "repetition_penalty": 1.05}
-        print(f"[generate:{task}] {len(prompts)} prompts (max_new_tokens={mn})")
-        t0 = time.time()
-        outputs = engine.generate(prompts, sampling)
-        elapsed = time.time() - t0
-        total_elapsed += elapsed
-        print(f"[generate:{task}] done in {elapsed:.1f}s "
-              f"({len(prompts)/elapsed:.2f} req/s)")
-        grouped[task] = outputs
-    return grouped, total_elapsed
+        for i, p in enumerate(prompts):
+            flat_prompts.append(p)
+            flat_max_new.append(max_new_tokens_per_task[task])
+            origins.append((task, i))
+
+    if not flat_prompts:
+        return {}
+
+    # SGLang accepts per-prompt sampling params as a list.
+    sampling_params = [
+        {"max_new_tokens": mn, "temperature": 0.0, "top_p": 1.0}
+        for mn in flat_max_new
+    ]
+
+    print(f"[generate] {len(flat_prompts)} prompts across {len(prompts_per_task)} tasks")
+    t0 = time.time()
+    outputs = engine.generate(flat_prompts, sampling_params)
+    elapsed = time.time() - t0
+    print(f"[generate] done in {elapsed:.1f}s")
+
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for (task, _), out in zip(origins, outputs):
+        grouped[task].append(out)
+    return dict(grouped), elapsed
 
 
 def write_jsonl(*, data, outputs, jsonl_path: str):
