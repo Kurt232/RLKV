@@ -182,3 +182,5 @@ cython_debug/
 *.code-workspace
 my_snapshot*
 log.txt
+scripts/run_reset_mode_diag.sh
+eval/efficiency/pred_sweep_diag/

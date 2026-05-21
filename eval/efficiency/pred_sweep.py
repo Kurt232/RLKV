@@ -1,10 +1,11 @@
 """
 Single-sparsity benchmark runner on SGLang.
 
-One invocation = one engine init at one sparsity. sparsity=0.0 means the
-full-attention baseline (no adapter needed); sparsity>0 means RLKV mode
-with the supplied adapter. All tasks listed in --tasks are batched into one
-engine.generate() call. Per-task outputs are written to:
+One invocation runs one sparsity. sparsity=0.0 means the full-attention
+baseline (no adapter needed); sparsity>0 means RLKV mode with the supplied
+adapter. Each task gets its own freshly-built engine (destroyed and rebuilt
+between tasks) so RLKV's dual KV pool is sized for that task's context and
+starts from clean allocator state. Per-task outputs are written to:
 
   pred/{model}/{task}-full.jsonl
   pred/{model}/{task}-rlkv-{adapter_tag}-s{sink}r{recent}-sp-{sp}.jsonl
@@ -41,9 +42,7 @@ import dataclasses
 import gc
 import json
 import os
-import sys
 import time
-from collections import defaultdict
 from typing import Optional
 
 import torch
@@ -124,14 +123,6 @@ def parse_args():
                    help="Re-run even when an output jsonl already exists")
     p.add_argument("--pred-root", default=None,
                    help="Override output directory (default: PRED_ROOT module constant)")
-    p.add_argument("--reset-mode", choices=["shutdown", "flush", "none"],
-                   default="shutdown",
-                   help="State reset between tasks (diagnostic):\n"
-                        "  shutdown: destroy+recreate engine (correctness; default).\n"
-                        "  flush:    engine.flush_cache() (resets allocator state\n"
-                        "            but not req_to_token tensor or attn buffers).\n"
-                        "  none:     share one engine across all tasks (reproduces\n"
-                        "            the cross-task RLKV corruption — for debugging only).")
     args = p.parse_args()
     if args.sparsity > 0 and not args.adapter_load_path:
         p.error("--adapter-load-path is required when --sparsity > 0")
@@ -265,54 +256,13 @@ def shutdown(engine):
 def run_at_sparsity(*, args, model_path, adapter_tag,
                     sparsity, method, active_tasks, all_data, all_prompts,
                     max_new_tokens_per_task) -> list[str]:
-    """Run each task and write jsonl. Inter-task reset behavior is controlled
-    by args.reset_mode:
+    """Run each task on its own freshly-built engine and write jsonl.
 
-    - "shutdown" (default, correctness): destroy and rebuild engine per task.
-      Tested empirically lossless: on Llama-3.1-8B sp=0.6, scores match HF
-      transformers eval. Cost ~60s × N tasks of init overhead.
-
-    - "flush" (diagnostic): reuse engine across tasks but call
-      engine.flush_cache() between. Resets allocators (tree_cache,
-      req_to_token_pool.free_slots, full_to_comp_mapping, _comp_free_chunks)
-      but NOT req_to_token tensor values, KV buffer contents, or attention
-      backend private buffers (_kv_indices_buf, _window_kv_indices_buf,
-      forward_metadata, captured CUDA graphs).
-
-    - "none" (diagnostic): reuse engine across tasks with no reset.
-      Reproduces the cross-task RLKV corruption (first task ~lossless,
-      every task after collapses to 30-40% of full attention).
-
-    The "flush" vs "none" comparison isolates whether the bug is in
-    allocator state (flush fixes it) or in the un-resettable parts
-    (tensor staleness / attn backend buffers).
+    The engine is destroyed and rebuilt per task. RLKV's dual KV pool is
+    sized at init for that task's context, and a fresh engine guarantees
+    clean allocator state — empirically lossless (Llama-3.1-8B sp=0.6 matches
+    the HF transformers eval). Cost is ~60s of init overhead per task.
     """
-    if not active_tasks:
-        return []
-
-    # Engine init size needs to handle the largest task's context. For per-task
-    # shutdown mode, we re-init per task with task-specific context. For shared
-    # engine modes (flush/none), one init must cover all tasks.
-    if args.reset_mode == "shutdown":
-        return _run_shutdown_per_task(
-            args=args, model_path=model_path, adapter_tag=adapter_tag,
-            sparsity=sparsity, method=method, active_tasks=active_tasks,
-            all_data=all_data, all_prompts=all_prompts,
-            max_new_tokens_per_task=max_new_tokens_per_task,
-        )
-    else:
-        return _run_shared_engine(
-            args=args, model_path=model_path, adapter_tag=adapter_tag,
-            sparsity=sparsity, method=method, active_tasks=active_tasks,
-            all_data=all_data, all_prompts=all_prompts,
-            max_new_tokens_per_task=max_new_tokens_per_task,
-            inter_task_flush=(args.reset_mode == "flush"),
-        )
-
-
-def _run_shutdown_per_task(*, args, model_path, adapter_tag,
-                           sparsity, method, active_tasks, all_data,
-                           all_prompts, max_new_tokens_per_task) -> list[str]:
     written: list[str] = []
     for task in active_tasks:
         prompts = all_prompts[task]
@@ -343,49 +293,6 @@ def _run_shutdown_per_task(*, args, model_path, adapter_tag,
             written.append(task)
         finally:
             shutdown(engine)
-    return written
-
-
-def _run_shared_engine(*, args, model_path, adapter_tag,
-                       sparsity, method, active_tasks, all_data, all_prompts,
-                       max_new_tokens_per_task, inter_task_flush: bool) -> list[str]:
-    # One engine for all tasks; sized for the largest task's context.
-    max_total_len = max(max_new_tokens_per_task[t] for t in active_tasks) * 2
-    engine = build_engine(model_path, method=method, args=args,
-                          sparsity=sparsity, max_total_len=max_total_len)
-    try:
-        asyncio.get_event_loop()
-    except RuntimeError:
-        asyncio.set_event_loop(asyncio.new_event_loop())
-
-    print(f"[diag] reset_mode={'flush' if inter_task_flush else 'none'} "
-          f"(shared engine, {len(active_tasks)} tasks)")
-    written: list[str] = []
-    try:
-        engine.generate("Hello", {"max_new_tokens": 1, "temperature": 0.0})
-        for i, task in enumerate(active_tasks):
-            prompts = all_prompts[task]
-            if not prompts:
-                continue
-            if i > 0 and inter_task_flush:
-                ok = engine.flush_cache()
-                print(f"[diag] flush_cache before {task}: success={ok}")
-            mn = max_new_tokens_per_task[task]
-            print(f"[generate:{task}] {len(prompts)} prompts (max_new_tokens={mn})")
-            outputs, elapsed = generate_one_task(engine, prompts, mn)
-            print(f"[generate:{task}] done in {elapsed:.1f}s "
-                  f"({len(prompts)/elapsed:.2f} req/s)")
-            jsonl_path = out_path_for(
-                args.model, task, method=method,
-                adapter_tag=adapter_tag,
-                sink=args.sink_size, recent=args.recent_size,
-                sparsity=sparsity, pred_root=args.pred_root,
-            )
-            write_jsonl(data=all_data[task], outputs=outputs, jsonl_path=jsonl_path)
-            print(f"[write] {task} method={method} sp={sparsity} → {jsonl_path}")
-            written.append(task)
-    finally:
-        shutdown(engine)
     return written
 
 
