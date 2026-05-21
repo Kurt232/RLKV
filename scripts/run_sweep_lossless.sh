@@ -5,7 +5,12 @@
 # list. Each sparsity = one fresh pred_sweep.py process = one engine init.
 # Cached (model, sp, task) outputs are skipped, so re-runs are cheap.
 #
-# Aggregate results into the paper table with:
+# This script ONLY generates prediction jsonls. Run scoring separately on
+# the login node (it's CPU-bound and slow; no need to occupy a compute
+# node for it):
+#   bash scripts/run_sweep_eval.sh Llama-3.1-8B-R1
+#
+# Aggregate to the paper table with:
 #   python eval/efficiency/tab_sweep.py --models Llama-3.1-8B-R1 Qwen-2.5-7B-R1 Qwen-3-4B-Thinking
 #
 # Usage:
@@ -14,10 +19,14 @@
 # SP_LIST is a space-separated list (quote it). Default: "0.0 0.4 0.6 0.8".
 # 0.0 = full-attention baseline (no adapter); >0 = RLKV at that sparsity.
 #
+# Set RERUN=1 to force-regenerate outputs that already exist (default: skip
+# cached). Useful after a kernel/correctness fix invalidates old jsonls.
+#
 # Examples:
 #   bash scripts/run_sweep_lossless.sh 0 Llama-3.1-8B-R1                            # default sparsities
 #   bash scripts/run_sweep_lossless.sh 1 Qwen-2.5-7B-R1 64:128
 #   bash scripts/run_sweep_lossless.sh 2 Qwen-3-4B-Thinking 128:256 "0.4 0.5 0.6"   # custom list
+#   RERUN=1 bash scripts/run_sweep_lossless.sh 2 Qwen-3-4B-Thinking 16:64 "0.4 0.6" # overwrite cached
 #
 # Fan-out across 3 GPUs (one model per GPU, run in parallel):
 #   bash scripts/run_sweep_lossless.sh 0 Llama-3.1-8B-R1     16:64 &
@@ -43,7 +52,15 @@ SP_LIST=${4:-"0.0 0.4 0.6"}
 SINK="${WIN%%:*}"
 RECENT="${WIN##*:}"
 
-export HF_HOME=${HF_HOME:-/mnt/afs/duwenjie/.cache/huggingface}
+# Set RERUN=1 to regenerate outputs even when a (model, sp, task) jsonl
+# already exists (passes --is-rerun to pred_sweep.py). Default: skip cached.
+RERUN_FLAG=()
+if [ "${RERUN:-0}" != "0" ]; then
+    RERUN_FLAG=(--is-rerun)
+fi
+
+export HF_HOME=${HF_HOME:-$HOME/.cache/huggingface}
+export HF_TOKEN="${HF_TOKEN:-}"
 # HF_TOKEN must come from the environment (e.g. ~/.bashrc or
 # `huggingface-cli login`). Don't hardcode it here — this file is in git.
 if [ -z "$HF_TOKEN" ]; then
@@ -96,7 +113,7 @@ export HF_HOME
 # Pin to the rlkv-eval env's python so this runs without `conda activate`
 # (e.g. on compute nodes where conda isn't on PATH). Override via env var:
 #   PYTHON=/path/to/other/python bash scripts/run_sweep_lossless.sh ...
-PYTHON="${PYTHON:-/mnt/afs/duwenjie/.conda/envs/rlkv-eval/bin/python}"
+PYTHON="${PYTHON:-python}"
 if [ ! -x "$PYTHON" ]; then
     echo "[error] python binary not found: $PYTHON" >&2
     echo "        run scripts/setup_eval_env.sh first, or override with PYTHON=..." >&2
@@ -132,23 +149,15 @@ for sp in $SP_LIST; do
         --sink-size "$SINK" --recent-size "$RECENT" \
         --tasks "${TASKS[@]}" \
         --sparsity "$sp" \
+        "${RERUN_FLAG[@]}" \
         2>&1 | tee "$LOG"
 done
 
-# Score all jsonl outputs at once. Reads eval/efficiency/pred_sweep/<MODEL>/
-# and writes result.json / result_lengths.json / result_evals.json there.
-EVAL_LOG="${LOG_DIR}/${MODEL}_s${SINK}r${RECENT}_eval.log"
-echo ""
-echo ">>> [$MODEL] scoring → $EVAL_LOG"
-"$PYTHON" -u eval/src/eval.py \
-    --model "$MODEL" \
-    --results_path eval/efficiency/pred_sweep \
-    2>&1 | tee "$EVAL_LOG"
-
 echo ""
 echo "============================================="
-echo "Sweep complete for ($MODEL, sink=$SINK, recent=$RECENT) over sp={$SP_LIST}."
-echo "Per-file scores: eval/efficiency/pred_sweep/${MODEL}/result.json"
-echo "Aggregate to paper table with:"
-echo "  python eval/efficiency/tab_sweep.py --models <models...>"
+echo "Generation complete for ($MODEL, sink=$SINK, recent=$RECENT) over sp={$SP_LIST}."
+echo "Predictions: eval/efficiency/pred_sweep/${MODEL}/"
+echo ""
+echo "Score on the login node (eval is CPU-bound and slow):"
+echo "  bash scripts/run_sweep_eval.sh ${MODEL}"
 echo "============================================="

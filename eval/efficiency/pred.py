@@ -87,7 +87,7 @@ def main():
     hf_model_ids = {
         "Llama-3.1-8B-R1": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
         "Qwen-2.5-7B-R1": "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
-        "Qwen-3-4B-Thinking": "Qwen/Qwen3-4B",
+        "Qwen-3-4B-Thinking": "Qwen/Qwen3-4B-Thinking-2507",
     }
 
     model_name = args.model

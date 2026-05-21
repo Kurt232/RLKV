@@ -60,20 +60,15 @@ SUPPORTED_TASKS = {
 HF_MODEL_IDS = {
     "Llama-3.1-8B-R1": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
     "Qwen-2.5-7B-R1":  "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
-    "Qwen-3-4B-Thinking": "Qwen/Qwen3-4B",
+    "Qwen-3-4B-Thinking": "Qwen/Qwen3-4B-Thinking-2507",
 }
 
 PRED_ROOT = "eval/efficiency/pred_sweep"
 
-# Sparsity → max_running_requests. Capped so every in-flight decode batch
-# fits inside a captured CUDA graph (cuda_graph_max_bs below). Batches that
-# overflow fall back to eager kernels, which under RLKV compression have
-# been observed to push the model into degenerate repetition loops
-# ("So the picketers are not allowed..." repeated to max_new_tokens) —
-# i.e. CUDA-graph capture appears to be load-bearing for numerical
-# behavior, not just performance. Keep max_running ≤ CUDA_GRAPH_MAX_BS.
-# Higher sparsity shrinks the comp KV pool and frees memory, so we can
-# afford more concurrency, but never above the graph cap.
+# Sparsity → max_running_requests, tuned for A100 80GB. Higher sparsity
+# shrinks the comp KV pool (per-head fixed window) and frees full-pool
+# memory, letting the scheduler keep more concurrent requests in flight.
+# Values are 2× the 40GB numbers from scripts/run_efficiency.sh.
 # For sparsities not in the table, we use the largest table key ≤ the
 # requested sparsity (i.e. the conservative side).
 MAX_REQ_BY_SPARSITY = {
@@ -118,7 +113,7 @@ def parse_args():
     p.add_argument("--sparsity", type=float, default=0.0,
                    help="Single sparsity to run. 0.0 → full attention baseline "
                         "(adapter not needed); >0 → RLKV at that sparsity.")
-    p.add_argument("--max-running-requests", type=int, default=300,
+    p.add_argument("--max-running-requests", type=int, default=200,
                    help="Fallback when --sparsity is not in MAX_REQ_BY_SPARSITY")
     p.add_argument("--tp-size", type=int, default=1)
     p.add_argument("--model-path", type=str, default=None)
@@ -127,6 +122,16 @@ def parse_args():
     p.add_argument("--disable-cuda-graph", action="store_true")
     p.add_argument("--is-rerun", action="store_true",
                    help="Re-run even when an output jsonl already exists")
+    p.add_argument("--pred-root", default=None,
+                   help="Override output directory (default: PRED_ROOT module constant)")
+    p.add_argument("--reset-mode", choices=["shutdown", "flush", "none"],
+                   default="shutdown",
+                   help="State reset between tasks (diagnostic):\n"
+                        "  shutdown: destroy+recreate engine (correctness; default).\n"
+                        "  flush:    engine.flush_cache() (resets allocator state\n"
+                        "            but not req_to_token tensor or attn buffers).\n"
+                        "  none:     share one engine across all tasks (reproduces\n"
+                        "            the cross-task RLKV corruption — for debugging only).")
     args = p.parse_args()
     if args.sparsity > 0 and not args.adapter_load_path:
         p.error("--adapter-load-path is required when --sparsity > 0")
@@ -206,9 +211,10 @@ def build_engine(model_path: str, *, method: str, args, sparsity: float = 0.0,
 
 
 def out_path_for(model: str, task: str, *, method: str, adapter_tag: str,
-                 sink: int, recent: int, sparsity: float) -> str:
+                 sink: int, recent: int, sparsity: float,
+                 pred_root: Optional[str] = None) -> str:
     """Mirror eval/efficiency/pred.py naming so tab_sweep.py picks them up."""
-    root = f"{PRED_ROOT}/{model}"
+    root = f"{pred_root or PRED_ROOT}/{model}"
     os.makedirs(root, exist_ok=True)
     if method == "full":
         return f"{root}/{task}-full.jsonl"
@@ -216,38 +222,12 @@ def out_path_for(model: str, task: str, *, method: str, adapter_tag: str,
             f"-s{sink}r{recent}-sp-{sparsity}.jsonl")
 
 
-def run_batched(engine, prompts_per_task: dict[str, list[str]],
-                max_new_tokens_per_task: dict[str, int]) -> dict[str, list[dict]]:
-    """Run all (task, prompt) pairs in one engine.generate call, return per-task outputs."""
-    # Build flat list, track origin.
-    flat_prompts = []
-    flat_max_new = []
-    origins = []  # (task, idx_within_task)
-    for task, prompts in prompts_per_task.items():
-        for i, p in enumerate(prompts):
-            flat_prompts.append(p)
-            flat_max_new.append(max_new_tokens_per_task[task])
-            origins.append((task, i))
-
-    if not flat_prompts:
-        return {}
-
-    # SGLang accepts per-prompt sampling params as a list.
-    sampling_params = [
-        {"max_new_tokens": mn, "temperature": 0.0, "top_p": 1.0}
-        for mn in flat_max_new
-    ]
-
-    print(f"[generate] {len(flat_prompts)} prompts across {len(prompts_per_task)} tasks")
+def generate_one_task(engine, prompts: list[str], max_new_tokens: int) -> tuple[list[dict], float]:
+    """Run one task's prompts on the engine. Returns (outputs, elapsed_s)."""
+    sampling = {"max_new_tokens": max_new_tokens, "temperature": 0.0, "top_p": 1.0}
     t0 = time.time()
-    outputs = engine.generate(flat_prompts, sampling_params)
-    elapsed = time.time() - t0
-    print(f"[generate] done in {elapsed:.1f}s")
-
-    grouped: dict[str, list[dict]] = defaultdict(list)
-    for (task, _), out in zip(origins, outputs):
-        grouped[task].append(out)
-    return dict(grouped), elapsed
+    outputs = engine.generate(prompts, sampling)
+    return outputs, time.time() - t0
 
 
 def write_jsonl(*, data, outputs, jsonl_path: str):
@@ -284,48 +264,129 @@ def shutdown(engine):
 
 def run_at_sparsity(*, args, model_path, adapter_tag,
                     sparsity, method, active_tasks, all_data, all_prompts,
-                    max_total_len, max_new_tokens_per_task) -> list[str]:
-    """Run one engine init at the given sparsity over all `active_tasks`.
-    Writes per-task jsonl + stats; scoring is offline (eval/src/eval.py).
-    Returns the list of task names actually written."""
+                    max_new_tokens_per_task) -> list[str]:
+    """Run each task and write jsonl. Inter-task reset behavior is controlled
+    by args.reset_mode:
+
+    - "shutdown" (default, correctness): destroy and rebuild engine per task.
+      Tested empirically lossless: on Llama-3.1-8B sp=0.6, scores match HF
+      transformers eval. Cost ~60s × N tasks of init overhead.
+
+    - "flush" (diagnostic): reuse engine across tasks but call
+      engine.flush_cache() between. Resets allocators (tree_cache,
+      req_to_token_pool.free_slots, full_to_comp_mapping, _comp_free_chunks)
+      but NOT req_to_token tensor values, KV buffer contents, or attention
+      backend private buffers (_kv_indices_buf, _window_kv_indices_buf,
+      forward_metadata, captured CUDA graphs).
+
+    - "none" (diagnostic): reuse engine across tasks with no reset.
+      Reproduces the cross-task RLKV corruption (first task ~lossless,
+      every task after collapses to 30-40% of full attention).
+
+    The "flush" vs "none" comparison isolates whether the bug is in
+    allocator state (flush fixes it) or in the un-resettable parts
+    (tensor staleness / attn backend buffers).
+    """
     if not active_tasks:
         return []
 
-    engine = build_engine(model_path, method=method, args=args,
-                          sparsity=sparsity, max_total_len=max_total_len)
-    # sglang Engine init can clear/replace the main-thread event loop (uvloop
-    # takes over). Re-bootstrap before any engine.generate() call. Same
-    # workaround as in eval/efficiency/pred.py.
-    try:
-        asyncio.get_event_loop()
-    except RuntimeError:
-        asyncio.set_event_loop(asyncio.new_event_loop())
-    try:
-        # Warmup so triton JIT happens once, not amortized into our timing.
-        engine.generate("Hello", {"max_new_tokens": 1, "temperature": 0.0})
-
-        prompts_per_task = {t: all_prompts[t] for t in active_tasks}
-        outputs_by_task, total_time = run_batched(
-            engine, prompts_per_task, max_new_tokens_per_task,
+    # Engine init size needs to handle the largest task's context. For per-task
+    # shutdown mode, we re-init per task with task-specific context. For shared
+    # engine modes (flush/none), one init must cover all tasks.
+    if args.reset_mode == "shutdown":
+        return _run_shutdown_per_task(
+            args=args, model_path=model_path, adapter_tag=adapter_tag,
+            sparsity=sparsity, method=method, active_tasks=active_tasks,
+            all_data=all_data, all_prompts=all_prompts,
+            max_new_tokens_per_task=max_new_tokens_per_task,
+        )
+    else:
+        return _run_shared_engine(
+            args=args, model_path=model_path, adapter_tag=adapter_tag,
+            sparsity=sparsity, method=method, active_tasks=active_tasks,
+            all_data=all_data, all_prompts=all_prompts,
+            max_new_tokens_per_task=max_new_tokens_per_task,
+            inter_task_flush=(args.reset_mode == "flush"),
         )
 
-        written: list[str] = []
-        for task in active_tasks:
-            outs = outputs_by_task.get(task, [])
-            if not outs:
-                continue
+
+def _run_shutdown_per_task(*, args, model_path, adapter_tag,
+                           sparsity, method, active_tasks, all_data,
+                           all_prompts, max_new_tokens_per_task) -> list[str]:
+    written: list[str] = []
+    for task in active_tasks:
+        prompts = all_prompts[task]
+        if not prompts:
+            continue
+        mn = max_new_tokens_per_task[task]
+        max_total_len = mn * 2  # prompt + completion, mirrors pred.py
+        engine = build_engine(model_path, method=method, args=args,
+                              sparsity=sparsity, max_total_len=max_total_len)
+        try:
+            asyncio.get_event_loop()
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+        try:
+            engine.generate("Hello", {"max_new_tokens": 1, "temperature": 0.0})
+            print(f"[generate:{task}] {len(prompts)} prompts (max_new_tokens={mn})")
+            outputs, elapsed = generate_one_task(engine, prompts, mn)
+            print(f"[generate:{task}] done in {elapsed:.1f}s "
+                  f"({len(prompts)/elapsed:.2f} req/s)")
             jsonl_path = out_path_for(
                 args.model, task, method=method,
                 adapter_tag=adapter_tag,
                 sink=args.sink_size, recent=args.recent_size,
-                sparsity=sparsity,
+                sparsity=sparsity, pred_root=args.pred_root,
             )
-            write_jsonl(data=all_data[task], outputs=outs, jsonl_path=jsonl_path)
+            write_jsonl(data=all_data[task], outputs=outputs, jsonl_path=jsonl_path)
             print(f"[write] {task} method={method} sp={sparsity} → {jsonl_path}")
             written.append(task)
-        return written
+        finally:
+            shutdown(engine)
+    return written
+
+
+def _run_shared_engine(*, args, model_path, adapter_tag,
+                       sparsity, method, active_tasks, all_data, all_prompts,
+                       max_new_tokens_per_task, inter_task_flush: bool) -> list[str]:
+    # One engine for all tasks; sized for the largest task's context.
+    max_total_len = max(max_new_tokens_per_task[t] for t in active_tasks) * 2
+    engine = build_engine(model_path, method=method, args=args,
+                          sparsity=sparsity, max_total_len=max_total_len)
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
+    print(f"[diag] reset_mode={'flush' if inter_task_flush else 'none'} "
+          f"(shared engine, {len(active_tasks)} tasks)")
+    written: list[str] = []
+    try:
+        engine.generate("Hello", {"max_new_tokens": 1, "temperature": 0.0})
+        for i, task in enumerate(active_tasks):
+            prompts = all_prompts[task]
+            if not prompts:
+                continue
+            if i > 0 and inter_task_flush:
+                ok = engine.flush_cache()
+                print(f"[diag] flush_cache before {task}: success={ok}")
+            mn = max_new_tokens_per_task[task]
+            print(f"[generate:{task}] {len(prompts)} prompts (max_new_tokens={mn})")
+            outputs, elapsed = generate_one_task(engine, prompts, mn)
+            print(f"[generate:{task}] done in {elapsed:.1f}s "
+                  f"({len(prompts)/elapsed:.2f} req/s)")
+            jsonl_path = out_path_for(
+                args.model, task, method=method,
+                adapter_tag=adapter_tag,
+                sink=args.sink_size, recent=args.recent_size,
+                sparsity=sparsity, pred_root=args.pred_root,
+            )
+            write_jsonl(data=all_data[task], outputs=outputs, jsonl_path=jsonl_path)
+            print(f"[write] {task} method={method} sp={sparsity} → {jsonl_path}")
+            written.append(task)
     finally:
         shutdown(engine)
+    return written
 
 
 def main():
@@ -344,7 +405,6 @@ def main():
     config_dir = os.path.join(os.path.dirname(__file__), "..", "config")
     dataset2maxlen = json.load(open(os.path.join(config_dir, "dataset2maxlen.json")))
     max_new_tokens_per_task = {t: dataset2maxlen[t] for t in args.tasks}
-    max_total_len = max(max_new_tokens_per_task.values()) * 2
 
     # Cache check: skip tasks whose jsonl already exists (unless --is-rerun).
     tasks_to_run: list[str] = []
@@ -352,7 +412,7 @@ def main():
     for t in args.tasks:
         jsonl_path = out_path_for(
             args.model, t, method=method, adapter_tag=adapter_tag,
-            sink=args.sink_size, recent=args.recent_size, sparsity=sparsity,
+            sink=args.sink_size, recent=args.recent_size, sparsity=sparsity, pred_root=args.pred_root,
         )
         if not args.is_rerun and os.path.exists(jsonl_path):
             cached.append(t)
@@ -379,7 +439,6 @@ def main():
         args=args, model_path=model_path, adapter_tag=adapter_tag,
         sparsity=sparsity, method=method, active_tasks=tasks_to_run,
         all_data=all_data, all_prompts=all_prompts,
-        max_total_len=max_total_len,
         max_new_tokens_per_task=max_new_tokens_per_task,
     )
 
