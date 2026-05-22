@@ -1,0 +1,19 @@
+{
+    "longreason-duo_attn-pattern-lr=0.02-reg=0.05-ctx=1000_32000-multi_passkey10-sp-0.2.jsonl": 49.5,
+    "longreason-duo_attn-pattern-lr=0.02-reg=0.05-ctx=1000_32000-multi_passkey10-sp-0.4.jsonl": 48.75,
+    "longreason-duo_attn-pattern-lr=0.02-reg=0.05-ctx=1000_32000-multi_passkey10-sp-0.6.jsonl": 35.25,
+    "longreason-duo_attn-pattern-lr=0.02-reg=0.05-ctx=1000_32000-multi_passkey10-sp-0.8.jsonl": 1.5,
+    "longreason-full.jsonl": 49.25,
+    "longreason-kvzip-scbench_repoqa-0-sp-0.2.jsonl": 48.0,
+    "longreason-kvzip-scbench_repoqa-0-sp-0.4.jsonl": 49.0,
+    "longreason-kvzip-scbench_repoqa-0-sp-0.6.jsonl": 36.0,
+    "longreason-kvzip-scbench_repoqa-0-sp-0.8.jsonl": 4.75,
+    "longreason-rkv-sp-0.2.jsonl": 0.0,
+    "longreason-rkv-sp-0.4.jsonl": 0.0,
+    "longreason-rkv-sp-0.6.jsonl": 0.0,
+    "longreason-rkv-sp-0.8.jsonl": 0.0,
+    "longreason-rlkv-laser_llama_r_v4__lr1e-2_ep2_bs32_reg1e-3__step185-sp-0.2.jsonl": 50.5,
+    "longreason-rlkv-laser_llama_r_v4__lr1e-2_ep2_bs32_reg1e-3__step185-sp-0.4.jsonl": 52.5,
+    "longreason-rlkv-laser_llama_r_v4__lr1e-2_ep2_bs32_reg1e-3__step185-sp-0.6.jsonl": 45.25,
+    "longreason-rlkv-laser_llama_r_v4__lr1e-2_ep2_bs32_reg1e-3__step185-sp-0.8.jsonl": 15.0
+}

@@ -6,5 +6,6 @@
     "mmlu_pro_che": 8192,
     "mmlu_pro_com": 8192,
     "mmlu_pro_law": 8192,
-    "mmlu_pro_phy": 8192
+    "mmlu_pro_phy": 8192,
+    "longreason": 71680
 }
