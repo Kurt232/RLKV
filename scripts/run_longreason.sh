@@ -49,6 +49,7 @@ gpus=(0 1 2 3)
 methods=(
     "rlkv"
     "duo_attn"
+    "kvzip"
     "rkv"
     # "h2o"      # OOM at 70K context
 )
@@ -70,12 +71,14 @@ for model in "${models[@]}"; do
     cfgs=(
         "$rlkv_cfg"
         "lr=0.02-reg=0.05-ctx=1000_32000-multi_passkey10"
+        "scbench_repoqa-0"
         "lr=0.02-reg=0.05-ctx=1000_32000-multi_passkey10"
         # "lr=0.02-reg=0.05-ctx=1000_32000-multi_passkey10"
     )
     attn_dirs=(
         "head_dist/rlkv"
         "head_dist/duo_attn"
+        "head_dist/kvzip"
         "head_dist/duo_attn"
         # "head_dist/duo_attn"
     )
