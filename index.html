@@ -4,23 +4,23 @@
   <meta charset="utf-8">
   <!-- Meta tags for social media banners, these should be filled in appropriatly as they are your "business card" -->
   <!-- Replace the content tag with appropriate information -->
-  <meta name="description" content="Which Heads Matter for Reasoning? RL-Guided KV Cache Compression">
+  <meta name="description" content="RLKV (ICML 2026): RL-guided KV cache compression that discovers reasoning-critical attention heads, enabling 20-60% cache reduction with near-lossless reasoning and up to 2.06x end-to-end speedup.">
   <meta property="og:title" content="Which Heads Matter for Reasoning? RL-Guided KV Cache Compression"/>
-  <meta property="og:description" content="Which Heads Matter for Reasoning? RL-Guided KV Cache Compression"/>
-  <meta property="og:url" content="URL OF THE WEBSITE"/>
+  <meta property="og:description" content="RLKV (ICML 2026): RL-guided KV cache compression that discovers reasoning-critical attention heads, enabling 20-60% cache reduction with near-lossless reasoning and up to 2.06x end-to-end speedup."/>
+  <meta property="og:url" content="https://kurt232.github.io/RLKV"/>
   <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X630-->
-  <meta property="og:image" content="static/image/your_banner_image.png" />
+  <meta property="og:image" content="static/images/method.jpg" />
   <meta property="og:image:width" content="1200"/>
   <meta property="og:image:height" content="630"/>
 
 
-  <meta name="twitter:title" content="TWITTER BANNER TITLE META TAG">
-  <meta name="twitter:description" content="TWITTER BANNER DESCRIPTION META TAG">
+  <meta name="twitter:title" content="Which Heads Matter for Reasoning? RL-Guided KV Cache Compression">
+  <meta name="twitter:description" content="RLKV uses reinforcement learning to discover reasoning-critical attention heads, enabling 20-60% KV cache reduction with near-lossless performance and up to 2.06x end-to-end speedup. ICML 2026.">
   <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X600-->
-  <meta name="twitter:image" content="static/images/your_twitter_banner_image.png">
+  <meta name="twitter:image" content="static/images/method.jpg">
   <meta name="twitter:card" content="summary_large_image">
   <!-- Keywords for your paper to be indexed by-->
-  <meta name="keywords" content="KEYWORDS SHOULD BE PLACED HERE">
+  <meta name="keywords" content="KV cache compression, reasoning LLM, reinforcement learning, attention heads, chain-of-thought, efficient inference, GRPO, ICML 2026">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
 
@@ -198,6 +198,7 @@
         <h2 class="title is-3 has-text-centered">News</h2>
         <div class="content">
           <ul>
+            <li><b>2026/06</b>: The camera-ready version is now available, with SGLang end-to-end speedup and long-context generalization results.</li>
             <li><b>2026/05</b>: RLKV is accepted to <a href="https://icml.cc/Conferences/2026" target="_blank">ICML 2026</a>! See you in Seoul!</li>
             <li><b>2026/04</b>: RLKV is supported in SGLang inference (see <a href="https://github.com/kurt232/RLKV#sglang-inference" target="_blank">code</a>).</li>
             <li><b>2026/03</b>: RLKV is presented at the <a href="https://latent-implicit-thinking.github.io/" target="_blank">LIT @ ICLR 2026 workshop</a> (Latent &amp; Implicit Thinking &mdash; Going Beyond CoT Reasoning).</li>
@@ -223,7 +224,7 @@ Existing token-dropping methods directly disrupt reasoning chains by removing in
 However, no existing method can identify which attention heads genuinely maintain reasoning consistency and control generation termination.
 To address this, we propose RLKV, which uses reinforcement learning as a probe to discover which heads contribute to reasoning quality by directly optimizing their cache usage against actual generation outcomes.
 This discovery naturally leads to an efficient compression strategy: we allocate full KV cache to reasoning-critical heads while aggressively compressing others with constant-size KV cache.
-Experiments reveal that a fraction of heads proves essential for reasoning, enabling <b>20-50%</b> cache reduction with near-lossless performance across diverse tasks and models.
+Experiments reveal that a fraction of heads proves essential for reasoning, enabling <b>20-60%</b> cache reduction with near-lossless performance across diverse tasks and models, and up to <b>2.06&times;</b> end-to-end speedup at 60% reduction.
           </p>
         </div>
       </div>
@@ -232,9 +233,35 @@ Experiments reveal that a fraction of heads proves essential for reasoning, enab
 </section>
 <!-- End paper abstract -->
 
+<!-- Motivation -->
 <section class="section">
   <div class="container is-max-desktop has-text-centered">
-    
+
+    <!-- Title -->
+    <h2 class="title is-3">Motivation: Which Heads Matter for Reasoning?</h2>
+
+    <!-- Text Content -->
+    <div class="content has-text-justified">
+      <p>
+Existing KV cache compression follows one of two strategies <b>(a)</b>: <b>token-dropping</b> methods evict less important tokens from every head's cache, while <b>head-reallocation</b> methods keep a full cache for a few critical heads and aggressively compress the rest. Both work well on instruct models but <b>degrade sharply on reasoning models</b> <b>(b, left)</b>, where extended chain-of-thought makes the KV cache the carrier of reasoning state rather than a mere optimization. The two strategies even fail differently <b>(b, right)</b>: token-dropping (R-KV) collapses into <i>repetitive</i> loops, whereas head-reallocation (DuoAttention) produces <i>over-extended</i> CoT that exhausts the length budget without reaching a solution. This raises our central question: <b>which attention heads genuinely matter for reasoning?</b>
+      </p>
+    </div>
+
+    <!-- Image Content -->
+    <div class="is-flex is-justify-content-center">
+      <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 0 auto;">
+        <img src="static/images/motivation.png" alt="Two KV cache compression strategies and their failure modes on reasoning models"
+             style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 100%;">
+      </figure>
+    </div>
+
+  </div>
+</section>
+<!-- End Motivation -->
+
+<section class="section">
+  <div class="container is-max-desktop has-text-centered">
+
     <!-- Title -->
     <h2 class="title is-3">Overview of RLKV</h2>
 
@@ -304,17 +331,134 @@ Our method uses RL as a probe to identify reasoning-critical heads. The RL pipel
                style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 95%;">
         </figure>
         <h2 class="subtitle has-text-centered">
-<b>Main Results.</b> RLKV (<b>Ours</b>) achieves a better accuracy&ndash;efficiency trade-off across three reasoning models (Llama-3.1-8B-R1, Qwen-2.5-7B-R1, Qwen-3-4B-Thinking) over four reasoning benchmarks (GSM8K, MATH, AIME24, MBPP) and four MMLU-Pro subsets (Chemistry, Computer Science, Law, Physics) at sparsity levels 0.2, 0.4, 0.6, and 0.8. RLKV consistently outperforms all baselines, with particularly strong advantages at high sparsity where competing methods degrade substantially.
+<b>Main Results.</b> RLKV (<b>Ours</b>) achieves a better accuracy&ndash;efficiency trade-off across three reasoning models (Llama-3.1-8B-R1, Qwen-2.5-7B-R1, Qwen-3-4B-Thinking) over four reasoning benchmarks (GSM8K, MATH, AIME24, MBPP) and four MMLU-Pro subsets (Chemistry, Computer Science, Law, Physics) at sparsity levels 0.2, 0.4, 0.6, and 0.8. RLKV consistently outperforms all baselines (H<sub>2</sub>O, R-KV, DuoAttention, and KVZip) by up to <b>20%</b> &mdash; on some tasks even surpassing the full KV cache baseline &mdash; with particularly strong advantages at high sparsity where competing methods degrade substantially.
         </h2>
       </div>
       <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
-        <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 2rem auto;">
-          <img src="static/images/mem.png" alt="lossless performance" 
-               style="border-radius: 12px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1); max-width: 95%;">
-        </figure>
+        <div class="table-container" style="width: 100%; max-width: 900px; margin: 0 auto;">
+          <table class="table is-bordered is-narrow is-hoverable is-fullwidth has-text-centered" style="font-size: 0.8rem; margin-bottom: 0;">
+            <thead>
+              <tr>
+                <th class="has-text-centered">Benchmark</th>
+                <th class="has-text-centered">Llama-3.1-8B-R1</th>
+                <th class="has-text-centered">Qwen-2.5-7B-R1</th>
+                <th class="has-text-centered">Qwen-3-4B-Thinking</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4" class="has-text-left has-background-light"><i>Math / Code</i></td></tr>
+              <tr>
+                <td>GSM8K</td>
+                <td style="background:#ffe6e6;">86.8 <small>(&minus;2.4, sp=0.4)</small></td>
+                <td style="background:#e6ffe6;">90.1 <small>(+1.0, sp=0.4)</small></td>
+                <td style="background:#ffe6e6;">94.4 <small>(&minus;0.7, sp=0.4)</small></td>
+              </tr>
+              <tr>
+                <td>Math500</td>
+                <td style="background:#e6ffe6;">84.6 <small>(+1.6, sp=0.4)</small></td>
+                <td style="background:#ffe6e6;">86.0 <small>(&minus;1.8, sp=0.4)</small></td>
+                <td style="background:#ffe6e6;">75.6 <small>(&minus;2.0, sp=0.6)</small></td>
+              </tr>
+              <tr>
+                <td>AIME24</td>
+                <td style="background:#e6ffe6;">40.0 <small>(+3.3, sp=0.4)</small></td>
+                <td style="background:#e6ffe6;">50.0 <small>(+6.7, sp=0.2)</small></td>
+                <td style="background:#e6ffe6;">50.0 <small>(+6.7, sp=0.4)</small></td>
+              </tr>
+              <tr>
+                <td>MBPP</td>
+                <td style="background:#e6ffe6;">63.8 <small>(+1.2, sp=0.4)</small></td>
+                <td style="background:#e6ffe6;">63.2 <small>(+0.0, sp=0.2)</small></td>
+                <td style="background:#ffe6e6;">81.0 <small>(&minus;0.2, sp=0.4)</small></td>
+              </tr>
+              <tr><td colspan="4" class="has-text-left has-background-light"><i>MMLU-Pro</i></td></tr>
+              <tr>
+                <td>Chem.</td>
+                <td style="background:#ffe6e6;">40.0 <small>(&minus;0.2, sp=0.4)</small></td>
+                <td style="background:#e6ffe6;">53.2 <small>(+2.2, sp=0.4)</small></td>
+                <td style="background:#e6ffe6;">74.2 <small>(+5.8, sp=0.4)</small></td>
+              </tr>
+              <tr>
+                <td>CS</td>
+                <td style="background:#e6ffe6;">47.8 <small>(+0.7, sp=0.2)</small></td>
+                <td style="background:#ffe6e6;">50.7 <small>(&minus;2.7, sp=0.5)</small></td>
+                <td style="background:#e6ffe6;">60.7 <small>(+7.0, sp=0.6)</small></td>
+              </tr>
+              <tr>
+                <td>Law</td>
+                <td style="background:#ffe6e6;">21.8 <small>(&minus;1.2, sp=0.6)</small></td>
+                <td style="background:#e6ffe6;">13.0 <small>(+0.2, sp=0.5)</small></td>
+                <td style="background:#e6ffe6;">32.0 <small>(+6.0, sp=0.6)</small></td>
+              </tr>
+              <tr>
+                <td>Phys.</td>
+                <td style="background:#ffe6e6;">40.0 <small>(&minus;1.0, sp=0.4)</small></td>
+                <td style="background:#ffe6e6;">51.2 <small>(&minus;2.4, sp=0.4)</small></td>
+                <td style="background:#e6ffe6;">71.8 <small>(+2.0, sp=0.4)</small></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <h2 class="subtitle has-text-centered">
-<b>Near lossless performance achieved by RLKV across four reasoning benchmarks.</b> The lossless sparsity threshold varies across benchmarks and models, capturing how task difficulty, type, and model itself jointly affect compression sensitivity. RLKV exhibits the smallest performance degradation.
-      </h2>
+<b>Near-lossless compression.</b> RLKV achieves <b>20&ndash;60% KV cache reduction</b> with near-lossless performance across reasoning and knowledge tasks. Each cell is RLKV's accuracy at its near-lossless sparsity (sp), with the change from full attention in parentheses; <span style="background:#e6ffe6; padding:0 4px;">green</span> gains over full attention, <span style="background:#ffe6e6; padding:0 4px;">red</span> loses.
+       </h2>
+      </div>
+      <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <div class="table-container" style="width: 100%; max-width: 820px; margin: 0 auto;">
+          <table class="table is-bordered is-narrow is-hoverable is-fullwidth has-text-centered" style="font-size: 0.9rem; margin-bottom: 0;">
+            <thead>
+              <tr>
+                <th class="has-text-centered">Sparsity</th>
+                <th class="has-text-centered">Concur.</th>
+                <th class="has-text-centered">Time (s)</th>
+                <th class="has-text-centered">Acc. (%)</th>
+                <th class="has-text-centered">Thpt. (tok/s)</th>
+                <th class="has-text-centered">Speedup</th>
+                <th class="has-text-centered">Theoretical</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Full</td><td>150</td><td>1,036</td><td>79.4</td><td>1,500</td><td>1.00&times;</td><td>&ndash;</td></tr>
+              <tr><td>0.2</td><td>200</td><td>874</td><td>78.6</td><td>1,758</td><td><b>1.19&times;</b></td><td>1.24&times;</td></tr>
+              <tr><td>0.4</td><td>250</td><td>666</td><td>79.6</td><td>2,185</td><td><b>1.56&times;</b></td><td>1.64&times;</td></tr>
+              <tr><td>0.5</td><td>300</td><td>574</td><td>77.6</td><td>2,553</td><td><b>1.80&times;</b></td><td>1.95&times;</td></tr>
+              <tr><td>0.6</td><td>375</td><td>504</td><td>73.8</td><td>2,941</td><td><b>2.06&times;</b></td><td>2.40&times;</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h2 class="subtitle has-text-centered">
+<b>Inference efficiency (SGLang).</b> A dual KV pool &mdash; a paged cache for full-attention heads and a fixed-size sink+local buffer for compressed heads &mdash; frees memory back into the full pool to raise concurrency, yielding <b>end-to-end speedup that grows with sparsity</b>, up to <b>2.06&times;</b> at 60% reduction (Llama-3.1-8B-R1, Math500, single A100 40G).
+       </h2>
+      </div>
+      <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <div class="table-container" style="width: 100%; max-width: 720px; margin: 0 auto;">
+          <table class="table is-bordered is-narrow is-hoverable is-fullwidth has-text-centered" style="font-size: 0.9rem; margin-bottom: 0;">
+            <thead>
+              <tr>
+                <th class="has-text-centered">Method</th>
+                <th class="has-text-centered">sp&nbsp;=&nbsp;0.2</th>
+                <th class="has-text-centered">sp&nbsp;=&nbsp;0.4</th>
+                <th class="has-text-centered">sp&nbsp;=&nbsp;0.6</th>
+                <th class="has-text-centered">sp&nbsp;=&nbsp;0.8</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5" class="has-text-left has-background-light"><i>Llama-3.1-8B-R1</i> &mdash; Full: 49.25</td></tr>
+              <tr><td>R-KV</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
+              <tr><td>DuoAttention</td><td>49.5</td><td>48.75</td><td>35.25</td><td>1.5</td></tr>
+              <tr><td>KVZip</td><td>48.0</td><td>49.0</td><td>36.0</td><td>4.75</td></tr>
+              <tr><td><b>RLKV (Ours)</b></td><td><b>50.5</b></td><td><b>52.5</b></td><td><b>45.25</b></td><td><b>15.0</b></td></tr>
+              <tr><td colspan="5" class="has-text-left has-background-light"><i>Qwen-3-4B-Thinking</i> &mdash; Full: 70.25</td></tr>
+              <tr><td>R-KV</td><td>1.25</td><td>0.75</td><td>0.5</td><td>0.5</td></tr>
+              <tr><td>DuoAttention</td><td>69.75</td><td>63.25</td><td>55.5</td><td>1.0</td></tr>
+              <tr><td>KVZip</td><td><b>71.25</b></td><td>67.25</td><td>53.0</td><td>0.25</td></tr>
+              <tr><td><b>RLKV (Ours)</b></td><td>68.5</td><td><b>68.25</b></td><td><b>58.25</b></td><td><b>3.0</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h2 class="subtitle has-text-centered">
+<b>Long-context generalization.</b> Trained with rollouts capped at <b>8K tokens</b>, RLKV transfers cleanly to <b>70K context</b> on LongReason (64K-input subset), outperforming all baselines with the gap widening at higher sparsity. (H<sub>2</sub>O omitted: out of memory; Qwen-2.5-7B-R1 excluded: full-attention accuracy 0.5%.)
+       </h2>
       </div>
       <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
         <figure class="image" style="display: flex; justify-content: center; align-items: center; margin: 2rem auto;">
@@ -323,6 +467,48 @@ Our method uses RL as a probe to identify reasoning-critical heads. The RL pipel
         </figure>
         <h2 class="subtitle has-text-centered">
 <b>Ablation of key components in RLKV training</b> (Qwen-2.5-7B-R1 on Math500). <i>Left</i>: adaptive penalty weighting stabilizes training under sparsity, breaking the vicious cycle between sparse rewards and dense L1 penalty. <i>Middle</i>: self-distillation sampling yields more stable reward signals than training on overly difficult problems. <i>Right</i>: a moderate L1 penalty weight &beta;=0.001 provides the best sparsity&ndash;performance trade-off.
+       </h2>
+      </div>
+      <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
+        <div class="table-container" style="width: 100%; max-width: 760px; margin: 0 auto;">
+          <table class="table is-bordered is-narrow is-hoverable is-fullwidth has-text-centered" style="font-size: 0.9rem; margin-bottom: 0;">
+            <thead>
+              <tr>
+                <th class="has-text-centered">Sink + Local</th>
+                <th class="has-text-centered">sp&nbsp;=&nbsp;0.2</th>
+                <th class="has-text-centered">sp&nbsp;=&nbsp;0.4</th>
+                <th class="has-text-centered">sp&nbsp;=&nbsp;0.6</th>
+                <th class="has-text-centered">sp&nbsp;=&nbsp;0.8</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Full</td><td colspan="4" class="has-background-light">80.8</td></tr>
+              <tr>
+                <td>16 + 64</td>
+                <td style="background:#e6ffe6;">78.2 <small>(&minus;2.6)</small></td>
+                <td style="background:#e6ffe6;">79.4 <small>(&minus;1.4)</small></td>
+                <td style="background:#ffe6e6;">75.0 <small>(&minus;5.8)</small></td>
+                <td style="background:#ffe6e6;">40.6 <small>(&minus;40.2)</small></td>
+              </tr>
+              <tr>
+                <td>32 + 128</td>
+                <td style="background:#e6ffe6;">82.2 <small>(+1.4)</small></td>
+                <td style="background:#e6ffe6;">81.8 <small>(+1.0)</small></td>
+                <td style="background:#e6ffe6;">80.4 <small>(&minus;0.4)</small></td>
+                <td style="background:#ffe6e6;">55.6 <small>(&minus;25.2)</small></td>
+              </tr>
+              <tr>
+                <td>64 + 256</td>
+                <td style="background:#e6ffe6;">79.8 <small>(&minus;1.0)</small></td>
+                <td style="background:#e6ffe6;">80.2 <small>(&minus;0.6)</small></td>
+                <td style="background:#e6ffe6;">79.2 <small>(&minus;1.6)</small></td>
+                <td style="background:#ffe6e6;">64.6 <small>(&minus;16.2)</small></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h2 class="subtitle has-text-centered">
+<b>Sink + local window ablation</b> (Llama-3.1-8B-R1, Math500, SGLang). Each cell is accuracy with the change from the full-attention baseline (80.8) in parentheses; <span style="background:#e6ffe6; padding:0 4px;">green</span> cells are within 3 points of full. At low sparsity RLKV is robust to the window choice; at high sparsity, larger windows extend the lossless range and soften the degradation cliff, at only a marginal per-head KV cost.
        </h2>
       </div>
       <div class="item" style="min-height: 100%; display: flex; flex-direction: column; justify-content: center;">
@@ -392,11 +578,11 @@ Our method uses RL as a probe to identify reasoning-critical heads. The RL pipel
   <section class="section" id="BibTeX">
     <div class="container is-max-desktop content">
       <h2 class="title">BibTeX</h2>
-      <pre><code>@article{du2025whichheads,
+      <pre><code>@inproceedings{du2026whichheads,
   title={Which Heads Matter for Reasoning? RL-Guided KV Cache Compression},
   author={Du, Wenjie and Jiang, Li and Tao, Keda and Liu, Xue and Wang, Huan},
-  journal={arXiv preprint arXiv:2510.08525},
-  year={2025}
+  booktitle={Proceedings of the 43rd International Conference on Machine Learning (ICML)},
+  year={2026}
 }</code></pre>
     </div>
 </section>
